@@ -1,5 +1,10 @@
+// Load environment variables from .env
+require('dotenv').config();
+
 // Import the Express library so we can create a web server
 const express = require('express');
+const crypto = require('crypto');
+const razorpay = require('./config/razorpay');
 
 // Import the cors package to allow cross-origin requests from the frontend
 const cors = require('cors');
@@ -26,6 +31,65 @@ app.use(express.json());
 app.get('/api/test', (req, res) => {
   // Send a JSON response with a success message
   res.json({ message: 'Backend is working!' });
+});
+
+// ─── RAZORPAY ROUTES ─────────────────────────────────────────────────────────
+
+// Create an order
+app.post('/api/payment/create-order', async (req, res) => {
+  try {
+    const { amount, currency = 'INR' } = req.body;
+
+    // Options for Razorpay order
+    const options = {
+      amount: amount * 100, // Amount in paise
+      currency,
+      receipt: `receipt_order_${Date.now()}`,
+    };
+
+    const order = await razorpay.orders.create(options);
+
+    res.json({
+      success: true,
+      order_id: order.id,
+      amount: order.amount,
+      currency: order.currency,
+      key_id: process.env.RAZORPAY_KEY_ID, // Send key_id to frontend
+    });
+  } catch (error) {
+    console.error('Error creating order:', error);
+    res.status(500).json({ success: false, message: 'Something went wrong while creating the order.' });
+  }
+});
+
+// Verify payment signature
+app.post('/api/payment/verify', (req, res) => {
+  try {
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
+
+    // Create a string of order_id and payment_id
+    const body = razorpay_order_id + '|' + razorpay_payment_id;
+
+    // Generate the expected signature
+    const expectedSignature = crypto
+      .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
+      .update(body.toString())
+      .digest('hex');
+
+    // Compare the signatures
+    const isAuthentic = expectedSignature === razorpay_signature;
+
+    if (isAuthentic) {
+      // Signatures match! Payment is successful.
+      // Here you would typically update the order status in your database
+      res.json({ success: true, message: 'Payment verified successfully.' });
+    } else {
+      res.status(400).json({ success: false, message: 'Invalid signature. Payment verification failed.' });
+    }
+  } catch (error) {
+    console.error('Error verifying payment:', error);
+    res.status(500).json({ success: false, message: 'Internal server error during verification.' });
+  }
 });
 
 // ─── START SERVER ─────────────────────────────────────────────────────────────
