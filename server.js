@@ -17,6 +17,18 @@ const app = express();
 // Falls back to 5000 for local development
 const PORT = process.env.PORT || 5000;
 
+// ─── STARTUP CHECKS ───────────────────────────────────────────────────────────
+// Warn immediately if critical env vars are missing so issues are caught on deploy
+if (!process.env.SUPABASE_URL) {
+  console.error('❌ MISSING ENV VAR: SUPABASE_URL is not set!');
+}
+if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+  console.error('❌ MISSING ENV VAR: SUPABASE_SERVICE_ROLE_KEY is not set!');
+}
+if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+  console.log('✅ Supabase env vars loaded successfully.');
+}
+
 // ─── MIDDLEWARE ───────────────────────────────────────────────────────────────
 
 // Enable CORS for all routes — allows the React frontend to talk to this backend
@@ -111,10 +123,15 @@ app.post('/api/payment/verify', async (req, res) => {
       ]);
 
       if (dbError) {
-        // Log the DB error but do NOT fail the payment response — payment already succeeded
-        console.error('⚠️  Failed to save payment to Supabase:', dbError.message);
+        // Print the FULL error object so nothing is hidden in Render logs
+        console.error('❌ Supabase insert failed:', JSON.stringify(dbError, null, 2));
+        console.error('❌ Supabase insert failed (message):', dbError.message);
+        console.error('❌ Supabase insert failed (code):', dbError.code);
+        console.error('❌ Supabase insert failed (details):', dbError.details);
+        console.error('❌ Supabase insert failed (hint):', dbError.hint);
       } else {
-        console.log('✅ Payment saved to Supabase successfully');
+        console.log('✅ Payment Successful');
+        console.log('💾 Payment saved to Supabase successfully');
         console.log(`Original amount received: ${amountInRupees.toFixed(2)}`);
       }
 
