@@ -63,7 +63,7 @@ app.post('/api/payment/create-order', async (req, res) => {
 });
 
 // Verify payment signature
-app.post('/api/payment/verify', (req, res) => {
+app.post('/api/payment/verify', async (req, res) => {
   try {
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
 
@@ -81,6 +81,14 @@ app.post('/api/payment/verify', (req, res) => {
 
     if (isAuthentic) {
       // Signatures match! Payment is successful.
+      // Fetch payment details to get the actual amount
+      const payment = await razorpay.payments.fetch(razorpay_payment_id);
+      const amountInRupees = payment.amount / 100;
+      
+      console.log('✅ Payment Successful');
+      console.log(`Payment ID: ${razorpay_payment_id}`);
+      console.log(`Original amount received: ${amountInRupees}`);
+
       // Here you would typically update the order status in your database
       res.json({ success: true, message: 'Payment verified successfully.' });
     } else {
