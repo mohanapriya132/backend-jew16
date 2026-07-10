@@ -108,9 +108,10 @@ app.post('/api/payment/verify', async (req, res) => {
       console.log(`Payment ID: ${razorpay_payment_id}`);
       console.log(`Original amount received: ${amountInRupees}`);
 
-      // Save payment details to Supabase
-      const { error: dbError } = await supabase.from('payments').insert([
-        {
+      // ─── Save to Supabase (isolated — will never crash the payment flow) ────
+      console.log('💾 Attempting Supabase insert...');
+      try {
+        const insertPayload = {
           razorpay_payment_id,
           razorpay_order_id,
           razorpay_signature,
@@ -119,23 +120,29 @@ app.post('/api/payment/verify', async (req, res) => {
           payment_status: 'success',
           customer_name: customer_name || null,
           customer_email: customer_email || null,
-        },
-      ]);
+        };
 
-      if (dbError) {
-        // Print the FULL error object so nothing is hidden in Render logs
-        console.error('❌ Supabase insert failed:', JSON.stringify(dbError, null, 2));
-        console.error('❌ Supabase insert failed (message):', dbError.message);
-        console.error('❌ Supabase insert failed (code):', dbError.code);
-        console.error('❌ Supabase insert failed (details):', dbError.details);
-        console.error('❌ Supabase insert failed (hint):', dbError.hint);
-      } else {
-        console.log('✅ Payment Successful');
-        console.log('💾 Payment saved to Supabase successfully');
-        console.log(`Original amount received: ${amountInRupees.toFixed(2)}`);
+        console.log('💾 Insert payload:', JSON.stringify(insertPayload));
+
+        const { data, error: dbError } = await supabase
+          .from('payments')
+          .insert([insertPayload])
+          .select(); // .select() forces Supabase to return the inserted row & surface real errors
+
+        if (dbError) {
+          console.error('❌ Supabase insert failed:', JSON.stringify(dbError, null, 2));
+        } else {
+          console.log('💾 Payment saved to Supabase successfully');
+          console.log('💾 Inserted row:', JSON.stringify(data));
+        }
+      } catch (supabaseErr) {
+        // Catch any unexpected exception from the Supabase client itself
+        console.error('❌ Supabase insert threw an exception:', supabaseErr.message);
+        console.error('❌ Full exception:', JSON.stringify(supabaseErr, null, 2));
       }
+      // ────────────────────────────────────────────────────────────────────────
 
-      // Return success to the frontend
+      // Return success to the frontend (payment already verified — DB is secondary)
       res.json({ success: true, message: 'Payment verified successfully.' });
     } else {
       res.status(400).json({ success: false, message: 'Invalid signature. Payment verification failed.' });
